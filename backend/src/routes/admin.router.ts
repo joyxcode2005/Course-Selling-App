@@ -7,6 +7,11 @@ import Course from "../models/course.model.js";
 import multer from "multer";
 import { uploadFile } from "../services/s3service.js";
 
+interface CourseUpdateInput {
+  title?: string;
+  description?: string;
+}
+
 const adminRouter = Router();
 const upload = multer();
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -115,10 +120,6 @@ adminRouter.post(
     const admin = (req as any).admin;
     const file = req.file;
 
-    console.log("Title: ", title)
-    console.log("Description: ", description);
-    console.log("Price: ", price)
-
     if (!title || !description || !price || !file) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -147,10 +148,106 @@ adminRouter.post(
   }
 );
 
-adminRouter.delete("/course", (req: Request, res: Response) => {});
+adminRouter.delete("/course", async (req: Request, res: Response) => {
+  const { courseId } = req.query;
 
-adminRouter.put("/course", (req: Request, res: Response) => {});
+  if (!courseId || typeof courseId !== "string") {
+    return res.status(400).json({ message: "courseId is required in query" });
+  }
 
-adminRouter.get("/course/bulk", (req: Request, res: Response) => {});
+  const course = await Course.findById(courseId);
+  if (!course) {
+    return res.status(404).json({
+      message: "Course not found!!",
+    });
+  }
+
+  try {
+    const deleted = await Course.findByIdAndDelete(courseId);
+
+    if (deleted) {
+      return res.status(200).json({
+        message: `Course with id: ${courseId} has been deleted successfully`,
+      });
+    } else {
+      return res.status(500).json({
+        message: "Failed to delete the course",
+      });
+    }
+  } catch (error: any) {
+    console.log(error.message);
+    return res.status(500).json({
+      message: "Failed to delete the course. Internal Server Error",
+    });
+  }
+});
+
+adminRouter.put(
+  "/course",
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    try {
+      const { courseId, title, description, price } = req.body;
+
+      if (!courseId) {
+        return res
+          .status(400)
+          .json({ message: "courseId is required to update" });
+      }
+
+      // Build the update object dynamically
+      const updateData: any = {};
+
+      if (title) updateData.title = title;
+      if (description) updateData.description = description;
+      if (price) updateData.price = price;
+
+      if (req.file) {
+        const imageUrl = await uploadFile(req.file);
+        if (imageUrl) updateData.imageUrl = imageUrl;
+      }
+
+      const updatedCourse = await Course.findByIdAndUpdate(
+        courseId,
+        { $set: updateData },
+        { new: true }
+      );
+
+      if (!updatedCourse) {
+        return res.status(404).json({
+          message: "Course not found",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Course updated successfully",
+        course: updatedCourse,
+      });
+    } catch (error: any) {
+      console.error(error.message);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+);
+
+adminRouter.get("/course/bulk", async (req: Request, res: Response) => {
+  try {
+    const courses = await Course.find();
+    if (courses.length < 1) {
+      return res.status(200).json({
+        message: "No courses",
+      });
+    }
+
+    return res.status(200).json({
+      messages: `There are ${courses.length} courses`,
+      courses,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+});
 
 export default adminRouter;
