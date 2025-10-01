@@ -5,6 +5,12 @@ import jwt from "jsonwebtoken";
 import "dotenv/config";
 import User from "../models/user.model.js";
 import Course from "../models/course.model.js";
+import Purchase from "../models/purchase.model.js";
+import {
+  detectCardBrand,
+  isExpiryValid,
+  luhnCheck,
+} from "../services/payment.js";
 
 const userRouter = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -116,18 +122,132 @@ userRouter.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-userRouter.get(
-  "/purchases",
-  userMiddleware,
-  async (req: Request, res: Response) => {
-    const user = (req as any).user;
-    const data = await Course.find();
-  }
-);
+userRouter.use(userMiddleware);
 
-userRouter.post("/purchase", userMiddleware, (req: Request, res: Response) => {
+userRouter.get("/purchases", async (req: Request, res: Response) => {
+  const user = (req as any).user; // User set by auth middleware
+
+  if (!user) {
+    return res.status(401).json({
+      message: "Unauthorized",
+    });
+  }
+
+  try {
+    // 1. Find all the purchases of this user
+    const purchases = await Purchase.find({ userId: user.id });
+
+    // 2. Extract courseIds
+    const courseIds = purchases.map((p) => p.courseId);
+
+    // 3. Fetch the course details
+    const courses = await Course.find({ _id: { $in: courseIds } });
+
+    // 4. Send back
+    res.status(200).json({
+      purchases: courses,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
+});
+
+userRouter.post("/purchase", async (req: Request, res: Response) => {
   // Note: Should add payment method to this route (in-house or using a provider)
-  res.send("Course purchased");
+  try {
+    const user = (req as any).user; // get user from auth middleware
+    if (!user)
+      return res.status(401).json({
+        message: "Unauthorized",
+      });
+
+    const { courseId, card } = req.body;
+
+    if (!courseId) {
+      return res.status(400).json({
+        message: "Course Id is required",
+      });
+    }
+
+    if (!card) {
+      return res.status(400).json({
+        message: "Card details required",
+      });
+    }
+
+    const { number, expMonth, expYear, name, cvc } = card;
+
+    // Basic card validation
+    if (!number || !expMonth || !expYear || !cvc) {
+      return res.status(400).json({
+        message: "card number , expiry month, expiry year, cvc are required",
+      });
+    }
+
+    const cardDigits = number.replace(/\s+/g, "");
+    if (!/^\d{12,19}$/.test(cardDigits)) {
+      return res.status(400).json({
+        message: "invalid card number format",
+      });
+    }
+
+    // Luhn check
+    if (!luhnCheck(cardDigits)) {
+      return res.status(400).json({ message: "card number failed Luhn check" });
+    }
+
+    // CVV check
+    if (!/^\d{3,4}$/.test(String(cvc))) {
+      return res.status(400).json({ message: "invalid cvc" });
+    }
+
+    // Expiry check
+    if (!isExpiryValid(Number(expMonth), Number(expYear))) {
+      return res.status(400).json({
+        message: "Card expired",
+      });
+    }
+
+    // Validate course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Simulate payment processing delay
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // Mock payment outcome (adjust probability as needed)
+    const successProbability = 0.9; // 90% success for demo
+    const paymentSuccess = Math.random() < successProbability;
+
+    if (!paymentSuccess) {
+      return res
+        .status(402)
+        .json({ message: "Payment failed (mock). Try again." });
+    }
+
+    // Create purchase record but DO NOT SAVE full card details
+    const cardLast4 = cardDigits.slice(-4);
+    const cardBrand = detectCardBrand(cardDigits);
+    const transactionId = `mock_txn_${Date.now()}_${Math.floor(
+      Math.random() * 10000
+    )}`;
+
+    const purchase = new Purchase({
+      userId: user.id,
+      courseId: course._id,
+    });
+
+    await purchase.save();
+
+    return res.json({
+      message: "Course purchased (mock)",
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error" });
+  }
 });
 
 export default userRouter;

@@ -1,17 +1,26 @@
 import { Router, type Request, type Response } from "express";
+import Course from "../models/course.model.js";
 
 const courseRouter = Router();
 
-courseRouter.post("/purchase", (req: Request, res: Response) => {
-  res.json({
-    message: "Course Purchased",
-  });
-});
+courseRouter.get("/bulk", async (req: Request, res: Response) => {
+  try {
+    const courses = await Course.find();
+    if (courses.length < 1) {
+      return res.status(200).json({
+        message: "No courses",
+      });
+    }
 
-courseRouter.get("/bulk", (req: Request, res: Response) => {
-  res.json({
-    message: "All courses",
-  });
+    return res.status(200).json({
+      messages: `There are ${courses.length} courses`,
+      courses,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Internal Server Error",
+    });
+  }
 });
 
 export default courseRouter;

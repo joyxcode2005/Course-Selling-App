@@ -231,8 +231,9 @@ adminRouter.put(
 );
 
 adminRouter.get("/course/bulk", async (req: Request, res: Response) => {
+  const admin = (req as any).admin;
   try {
-    const courses = await Course.find();
+    const courses = await Course.find({ adminId: admin.id });
     if (courses.length < 1) {
       return res.status(200).json({
         message: "No courses",
