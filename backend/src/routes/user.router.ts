@@ -56,15 +56,15 @@ userRouter.post("/register", async (req: Request, res: Response) => {
     );
 
     // Send response
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
     res.status(201).json({
-      message: "User register",
-      token,
-      user: {
-        id: newUser._id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-      },
+      message: "User registered",
     });
   } catch (error: any) {
     console.log("Register error: ", error.message);
@@ -107,15 +107,16 @@ userRouter.post("/login", async (req: Request, res: Response) => {
       expiresIn: "1h",
     });
 
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     // Send the token back to fe
     res.json({
       message: "Login Successfull",
-      token,
-      user: {
-        id: user._id,
-        name: user.firstName + user.lastName,
-        email: user.email,
-      },
     });
   } catch (error: any) {
     console.error("Login Error: ", error.message);

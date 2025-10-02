@@ -6,22 +6,13 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
 
-
 export function userMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
 ) {
-  const authHeader = req.headers["authorization"];
-  console.log(JWT_SECRET);
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      message: "Unauthorized!!",
-    });
-  }
-
-  const token = authHeader.split(" ")[1] || "";
+  const token = req.cookies?.token;
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
